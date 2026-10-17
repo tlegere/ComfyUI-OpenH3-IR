@@ -322,7 +322,7 @@ class OpenH3IRCompile(io.ComfyNode):
                 shots: str, megapixels: float = 0.0,
                 spoken_language: str = DIALOGUE_LANGUAGES[0], media=None,
                 setup=None, director=None, sizing: str = "match", seed: int = 7,
-                effort: str = "standard") -> io.NodeOutput:
+                effort: str = "standard", prompt_only: bool = False) -> io.NodeOutput:
         # The socket is required, so ComfyUI refuses an unconnected graph before this runs. This is
         # the same refusal in this pack's own words, for the graph that arrives over /prompt with the
         # socket present and empty: without the five picks there is nothing to load, and the node
@@ -439,14 +439,18 @@ class OpenH3IRCompile(io.ComfyNode):
         video_vae = machine["video_vae"]
         audio_vae = machine["audio_vae"]
 
-        model = cls._load_model(checkpoint, machine["weight_dtype"])
-        clip = cls._load_clip(encoder)
-        vae = cls._load_vae(video_vae)
-        avae = cls._load_vae(audio_vae)
+        # Prompt-only mode takes exactly the same compilation path, including media,
+        # validation and reporting. The only difference is that it does not construct
+        # H3's model, encoder, VAEs or conditioning.
+        if not prompt_only:
+            model = cls._load_model(checkpoint, machine["weight_dtype"])
+            clip = cls._load_clip(encoder)
+            vae = cls._load_vae(video_vae)
+            avae = cls._load_vae(audio_vae)
 
-        positive, latent = cls._condition(
-            declared=declared, clip=clip, vae=vae, audio_vae=avae, prompt=prompt, width=width,
-            height=height, length=length, ref_image_size=ref_sizing, loaded=loaded, order=order)
+            positive, latent = cls._condition(
+                declared=declared, clip=clip, vae=vae, audio_vae=avae, prompt=prompt, width=width,
+                height=height, length=length, ref_image_size=ref_sizing, loaded=loaded, order=order)
 
         wiring = body.get("wiring") or []
         conflict = len({w.get("sizing") for w in wiring if w.get("sizing")}) > 1
@@ -489,16 +493,20 @@ class OpenH3IRCompile(io.ComfyNode):
         for said in cls._resample_notes(loaded):
             text += "\n" + said
         text += "\n" + line("job", declared)
-        text += "\n" + line("weights", f"{checkpoint}  via {unet_loader_for(checkpoint)}")
-        text += "\n" + line("encoder", f"{encoder}  via {clip_loader_for(encoder)}")
-        text += "\n" + line("vaes", f"{video_vae}  +  {audio_vae}")
+        if prompt_only:
+            text += "\n" + line("note", "Prompt Only: no H3 weights, encoder or VAEs were loaded.")
+        else:
+            text += "\n" + line("weights", f"{checkpoint}  via {unet_loader_for(checkpoint)}")
+            text += "\n" + line("encoder", f"{encoder}  via {clip_loader_for(encoder)}")
+            text += "\n" + line("vaes", f"{video_vae}  +  {audio_vae}")
         if handoff:
             text += "\n" + handoff
-        if is_gguf(checkpoint) and machine["weight_dtype"] != "default":
+        if not prompt_only and is_gguf(checkpoint) and machine["weight_dtype"] != "default":
             text += "\n" + precision_ignored_note()
         # Both warnings go to the report and to the console. Nothing obliges anyone to wire the
         # report output to a node that shows it, and a warning nobody can see is not a warning.
-        for said in (warning, family_warning(checkpoint, frames_job=frames_job)):
+        for said in (warning, family_warning(checkpoint, frames_job=frames_job)
+                     if not prompt_only else ""):
             if said:
                 text += "\n" + line("WARNING", said)
                 print("[OpenH3-IR] " + said)
@@ -509,6 +517,8 @@ class OpenH3IRCompile(io.ComfyNode):
             if note.startswith("note"):
                 print("[OpenH3-IR] " + " ".join(note.split()[1:]))
         print(f"[OpenH3-IR] {declared}: {length} frames ({length / FPS:.3f}s), {width}x{height}")
+        if prompt_only:
+            return io.NodeOutput(prompt, text)
         return io.NodeOutput(model, positive, latent, vae, avae, prompt, text)
 
     # ------------------------------------------------------------------ helpers
@@ -1000,15 +1010,54 @@ class OpenH3IRMedia(io.ComfyNode):
 # displays nothing is worse than none. Core ComfyUI ships "Preview as Text" (PreviewAny), which
 # accepts any input including our report string and renders it. Use that.
 
+class OpenH3IRPromptOnly(OpenH3IRCompile):
+    """Compile and validate a MiniMax H3 brief without loading H3's generation models."""
+
+    @classmethod
+    def define_schema(cls) -> io.Schema:
+        # Share Main's inputs rather than duplicating the compiler settings. Changing
+        # an input on Main should change it here too, with identical widget ordering.
+        main = OpenH3IRCompile.define_schema()
+        return io.Schema(
+            node_id="OpenH3IRPromptOnly",
+            display_name="OpenH3-IR Prompt Only",
+            category="OpenH3-IR",
+            search_aliases=["openh3", "h3", "prompt", "brief", "compile", "text"],
+            description=("Compile and validate an H3 brief with the same settings as Main, "
+                         "without loading the H3 checkpoint, encoder, VAEs or conditioning."),
+            inputs=main.inputs,
+            outputs=[
+                io.String.Output(display_name="prompt",
+                                 tooltip="The validated H3 brief, ready to inspect or reuse."),
+                io.String.Output(display_name="report",
+                                 tooltip="Compilation details, including validation and fallback."),
+            ],
+        )
+
+    @classmethod
+    def execute(cls, intent: str, seconds: float, aspect: str, creativity: str, silent: bool,
+                shots: str, megapixels: float = 0.0,
+                spoken_language: str = DIALOGUE_LANGUAGES[0], media=None,
+                setup=None, director=None, sizing: str = "match", seed: int = 7,
+                effort: str = "standard") -> io.NodeOutput:
+        return super().execute(
+            intent=intent, seconds=seconds, aspect=aspect, creativity=creativity,
+            silent=silent, shots=shots, megapixels=megapixels,
+            spoken_language=spoken_language, media=media, setup=setup,
+            director=director, sizing=sizing, seed=seed, effort=effort,
+            prompt_only=True,
+        )
+
+
 class OpenH3IRExtension(ComfyExtension):
     async def get_node_list(self):
-        return [OpenH3IRCompile, OpenH3IRDirector, OpenH3IRMedia, OpenH3IRSetup]
+        return [OpenH3IRCompile, OpenH3IRPromptOnly, OpenH3IRDirector, OpenH3IRMedia, OpenH3IRSetup]
 
 
 async def comfy_entrypoint() -> OpenH3IRExtension:
     return OpenH3IRExtension()
 
 
-__all__ = ["OpenH3IRCompile", "OpenH3IRDirector", "OpenH3IRMedia", "OpenH3IRSetup",
+__all__ = ["OpenH3IRCompile", "OpenH3IRPromptOnly", "OpenH3IRDirector", "OpenH3IRMedia", "OpenH3IRSetup",
            "OpenH3IRExtension",
            "comfy_entrypoint", "ServiceError"]
