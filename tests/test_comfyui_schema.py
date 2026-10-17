@@ -410,11 +410,11 @@ def test_the_graph_needs_no_loader_boxes():
 
 
 
-def test_prompt_only_has_two_text_outputs_and_reuses_mains_inputs():
+def test_prompt_only_has_three_text_outputs_and_reuses_mains_inputs():
     kinds = [k for k, _label in _outputs_of("OpenH3IRPromptOnly")]
     labels = [label for _kind, label in _outputs_of("OpenH3IRPromptOnly")]
-    assert kinds == ["String", "String"]
-    assert labels == ["prompt", "report"]
+    assert kinds == ["String", "String", "String"]
+    assert labels == ["prompt", "report", "diagnostics"]
     # Prompt Only's schema takes the same input objects from Main, preserving
     # the widget order and every optional socket without maintaining a copy.
     src = ast.get_source_segment(TEXT, SCHEMAS["OpenH3IRPromptOnly"])

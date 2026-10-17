@@ -48,9 +48,9 @@ const MIN_W = 430;
 const NODE_H = 773;
 const MIN_H = 719;   // MEASURED: the height where the prompt box lands on its own 124 floor
 const NODE_H_EXTRA = 178;
-// Prompt Only has two output sockets rather than seven. Keep the same panel area
-// without reserving the height occupied by Main's five additional sockets.
-const PROMPT_ONLY_NODE_H_EXTRA = 78;
+// Prompt Only has three output sockets rather than Main's seven. Reserve less
+// socket height while keeping the same panel area and resizable prompt editor.
+const PROMPT_ONLY_NODE_H_EXTRA = 98;
 const PROMPT_ONLY_NODE_H = NODE_H - (NODE_H_EXTRA - PROMPT_ONLY_NODE_H_EXTRA);
 const PROMPT_ONLY_MIN_H = MIN_H - (NODE_H_EXTRA - PROMPT_ONLY_NODE_H_EXTRA);
 const BOX_MIN = 124;

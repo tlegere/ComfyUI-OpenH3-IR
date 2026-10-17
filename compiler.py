@@ -636,7 +636,7 @@ def brief_from_payload(payload: dict[str, Any], sha_of) -> Any:
 # --------------------------------------------------------------------------- the compile
 
 def compile_here(payload: dict[str, Any], *, sha_of, llm_url: str, llm_model: str,
-                 timeout: float) -> dict[str, Any]:
+                 timeout: float, include_diagnostics: bool = False) -> dict[str, Any]:
     """Compile in this Python, and answer exactly what `h3ir_client.compile_brief` answers.
 
     Same keys, same meanings, so `render_fields`, `report` and `director_note` cannot tell the two
@@ -689,7 +689,42 @@ def compile_here(payload: dict[str, Any], *, sha_of, llm_url: str, llm_model: st
     except AssetAnalysisError as e:
         raise ServiceError(asset_unreadable(str(e))) from e
 
-    return _as_the_service_answers(doc, brief)
+    result = _as_the_service_answers(doc, brief)
+    if include_diagnostics:
+        result["diagnostics"] = compilation_diagnostics(doc)
+    return result
+
+
+def compilation_diagnostics(doc) -> dict[str, Any]:
+    """Optional test trace from the local compiler document; never changes the render output.
+
+    The compiler preserves the *last* rejected candidate and final errors on
+    validation fallback, not the original and each intermediate response.
+    This explicitly reports that limitation instead of claiming a complete
+    per-attempt trace. No prompt is written to disk.
+    """
+    meta = doc.provenance
+    return {
+        "schema_version": 1,
+        "available": True,
+        "status": "fallback" if doc.fell_back else doc.source,
+        "source": doc.source,
+        "fallback_reason": doc.fallback_reason or None,
+        "correction_rounds": meta.get("fix_rounds"),
+        "compiler_repairs": list(meta.get("repairs") or []),
+        "persisting_rules": list(meta.get("unfixable") or []),
+        "remaining_validation_errors": list(meta.get("rejected_rules") or []),
+        "last_rejected_brief": meta.get("rejected_written"),
+        "timings_seconds": dict(meta.get("timings") or {}),
+        "findings": [{"severity": f.severity, "rule": f.rule, "message": f.msg}
+                     for f in doc.findings],
+        "trace_limitations": (
+            "Only the last rejected written brief and final validation findings "
+            "are retained by this compiler. The initial and intermediate LLM "
+            "responses are not available here; a model failure during writing "
+            "may leave no rejected candidate."
+        ),
+    }
 
 
 def _endpoint_did_not_answer(unavailable, url: str, model: str) -> str:

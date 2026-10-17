@@ -27,7 +27,7 @@ def test_prompt_only_reuses_the_same_widgets_and_mention_editor():
 
 def test_prompt_only_reserves_less_space_for_its_two_output_sockets():
     assert "const NODE_H_EXTRA = 178;" in MAIN
-    assert "const PROMPT_ONLY_NODE_H_EXTRA = 78;" in MAIN
+    assert "const PROMPT_ONLY_NODE_H_EXTRA = 98;" in MAIN
     assert "const PROMPT_ONLY_NODE_H = NODE_H -" in MAIN
     assert "const PROMPT_ONLY_MIN_H = MIN_H -" in MAIN
     assert "const socketHeight = promptOnly ? PROMPT_ONLY_NODE_H_EXTRA : NODE_H_EXTRA;" in MAIN

@@ -42,6 +42,7 @@ and those two strings are the whole contract.
 """
 from __future__ import annotations
 
+import json
 import os
 import tempfile
 import time
@@ -422,7 +423,8 @@ class OpenH3IRCompile(io.ComfyNode):
                 build_payload(assets=plan_assets(written, sizing, "", ""),
                               transcripts=transcripts, **brief),
                 sha_of=sha_of, llm_url=llm_url, llm_model=llm_model,
-                timeout=float(machine["timeout_s"]))
+                timeout=float(machine["timeout_s"]),
+                include_diagnostics=prompt_only)
             handoff = ""
         else:
             body, handoff = compile_with_media(
@@ -525,7 +527,25 @@ class OpenH3IRCompile(io.ComfyNode):
                 print("[OpenH3-IR] " + " ".join(note.split()[1:]))
         print(f"[OpenH3-IR] {declared}: {length} frames ({length / FPS:.3f}s), {width}x{height}")
         if prompt_only:
-            return io.NodeOutput(prompt, text)
+            # The HTTP compiler exposes the final prompt and summary but not the
+            # in-process document's correction provenance. State that limitation;
+            # never silently present missing trace data as zero correction passes.
+            diagnostics = body.get("diagnostics") or {
+                "schema_version": 1,
+                "available": False,
+                "reason": ("This compiler service does not expose the rejected written "
+                           "candidate, validation details or correction counts."),
+            }
+            diagnostics = dict(diagnostics)
+            diagnostics["request"] = {
+                "seconds": seconds, "shots": shots, "creativity": creativity,
+                "effort": effort, "seed": seed, "silent": silent,
+                "spoken_language": spoken_language, "reference_sizing": sizing,
+            }
+            diagnostics["compiler"] = half.where
+            diagnostics["model"] = llm_model if here else None
+            return io.NodeOutput(
+                prompt, text, json.dumps(diagnostics, indent=2, ensure_ascii=False))
         return io.NodeOutput(model, positive, latent, vae, avae, prompt, text)
 
     # ------------------------------------------------------------------ helpers
@@ -1038,6 +1058,9 @@ class OpenH3IRPromptOnly(OpenH3IRCompile):
                                  tooltip="The validated H3 brief, ready to inspect or reuse."),
                 io.String.Output(display_name="report",
                                  tooltip="Compilation details, including validation and fallback."),
+                io.String.Output(display_name="diagnostics",
+                                 tooltip=("Optional JSON trace: correction passes, findings and "
+                                          "last rejected brief if the local compiler retained it.")),
             ],
         )
 
