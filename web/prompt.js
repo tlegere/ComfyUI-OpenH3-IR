@@ -38,7 +38,7 @@
  */
 import { app } from "../../scripts/app.js";
 
-const NODE = "OpenH3IRCompile";
+const NODES = ["OpenH3IRCompile", "OpenH3IRPromptOnly"];
 
 /* The prompt's whole grammar, and the same three literals tray.py reads it with. A mention
  * is @ and a label; a locked line runs from @speaks(" to the first ") . Nothing else is a construct.
@@ -566,7 +566,7 @@ app.registerExtension({
     document.head.append(style);
   },
   beforeRegisterNodeDef(nodeType, nodeData) {
-    if (nodeData?.name !== NODE) return;
+    if (!NODES.includes(nodeData?.name)) return;
     // The canvas redraws when anything changes, including a slot being renamed on the Media node,
     // which is the one thing that can turn a mention wrong without this box being touched.
     const onDraw = nodeType.prototype.onDrawForeground;
