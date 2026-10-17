@@ -729,7 +729,8 @@ def test_truncated_fallback_is_labeled_as_failure_not_a_finished_scene():
                    compile_seconds=294.958)
     assert "brief status" in got and "fallback" in got
     assert "TruncatedResponse" in got
-    assert "simple fallback is not the writer's completed scene" in got
+    # The report wraps notes at 94 characters; normalize continuations to read the sentence.
+    assert "simple fallback is not the writer's completed scene" in " ".join(got.split())
 
 
 def test_legacy_report_call_does_not_invent_run_telemetry():
