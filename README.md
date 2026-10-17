@@ -131,9 +131,18 @@ Search `h3` in ComfyUI to find Main, Prompt Only, Setup, Media and Director.
 
 For prompt development, connect **Setup** to **OpenH3-IR Prompt Only**. It uses
 the same prompt, timing, creativity, shots, optional Director and Media inputs as
-Main, and returns only `prompt` and `report`. It runs the same compiler and
-validation checks without loading the MiniMax H3 checkpoint, text encoder, VAEs,
+Main, and returns `prompt`, `report` and `diagnostics`. It runs the same compiler
+and validation checks without loading the MiniMax H3 checkpoint, text encoder, VAEs,
 or conditioning. This lets you inspect and reuse the brief before rendering.
+
+Connect `diagnostics` to **Preview as Text** when comparing seeds. It is a JSON
+record containing the settings, acceptance/fallback status, any correction-pass
+count, validation findings, and the **last rejected written brief**, if available.
+The in-process compiler currently retains only that final rejected candidate,
+not the original and every intermediate model response. If the model fails while
+writing, there may be no rejected text at all. When using a remote compiler service,
+the trace says it is unavailable instead of claiming that no corrections happened.
+No diagnostics are automatically saved to disk.
 
 Prompt Only still uses the existing Setup node, including its five model file
 selections, even though it does not load those files. No changes to saved Main
