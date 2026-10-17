@@ -32,7 +32,7 @@ import { attachPrompt, promptFacts } from "./prompt.js";
 
 const VERSION = "main v1";
 console.log("[OpenH3-IR]", VERSION);
-const NODE = "OpenH3IRCompile";
+const NODES = ["OpenH3IRCompile", "OpenH3IRPromptOnly"];
 
 /* Measured on the live canvas, not chosen. 520 by 773 is the proposed node, the same width as
  * Setup; 595 is the panel inside it, and the 178 between them is the seven output sockets plus the
@@ -48,6 +48,11 @@ const MIN_W = 430;
 const NODE_H = 773;
 const MIN_H = 719;   // MEASURED: the height where the prompt box lands on its own 124 floor
 const NODE_H_EXTRA = 178;
+// Prompt Only has two output sockets rather than seven. Keep the same panel area
+// without reserving the height occupied by Main's five additional sockets.
+const PROMPT_ONLY_NODE_H_EXTRA = 78;
+const PROMPT_ONLY_NODE_H = NODE_H - (NODE_H_EXTRA - PROMPT_ONLY_NODE_H_EXTRA);
+const PROMPT_ONLY_MIN_H = MIN_H - (NODE_H_EXTRA - PROMPT_ONLY_NODE_H_EXTRA);
 const BOX_MIN = 124;
 
 /* Every widget this panel drives, in the schema's own order. Hiding one the node does not have
@@ -128,7 +133,7 @@ function sizeWords(mp) {
 }
 
 class Panel {
-  constructor(node, widgets) {
+  constructor(node, widgets, promptOnly = false) {
     this.node = node;
     this.w = widgets;
     this.rows = {};
@@ -137,8 +142,9 @@ class Panel {
     this.root = el("div", { class: "oh3m-panel" });
     this.root.append(
       el("div", { class: "oh3m-title" },
-        el("b", { textContent: "Main" }),
-        el("span", { textContent: "one prompt to a ready H3 job" })));
+        el("b", { textContent: promptOnly ? "Prompt Only" : "Main" }),
+        el("span", { textContent: promptOnly ? "compile without H3 model loading"
+                                             : "one prompt to a ready H3 job" })));
 
     // ------------------------------------------------------------- your prompt
     this.root.append(
@@ -629,7 +635,11 @@ app.registerExtension({
       .replaceAll("var(--oh3-wmuted)", LG.WIDGET_SECONDARY_TEXT_COLOR || "#999") }));
   },
   beforeRegisterNodeDef(nodeType, nodeData) {
-    if (nodeData?.name !== NODE) return;
+    if (!NODES.includes(nodeData?.name)) return;
+    const promptOnly = nodeData.name === "OpenH3IRPromptOnly";
+    const height = promptOnly ? PROMPT_ONLY_NODE_H : NODE_H;
+    const minHeight = promptOnly ? PROMPT_ONLY_MIN_H : MIN_H;
+    const socketHeight = promptOnly ? PROMPT_ONLY_NODE_H_EXTRA : NODE_H_EXTRA;
     const onCreated = nodeType.prototype.onNodeCreated;
     nodeType.prototype.onNodeCreated = function () {
       const r = onCreated?.apply(this, arguments);
@@ -637,12 +647,12 @@ app.registerExtension({
       for (const w of this.widgets || []) by[w.name] = w;
       const absent = WIDGETS.filter((n) => !by[n]);
       if (absent.length) {
-        console.warn("[OpenH3-IR] the Main panel expected inputs this node does not have:",
+        console.warn("[OpenH3-IR] the prompt panel expected inputs this node does not have:",
                      absent.join(", "), "- drawing the plain node instead");
         return r;
       }
       for (const w of this.widgets || []) if (w.name !== BOARD) conceal(w);
-      const panel = new Panel(this, by);
+      const panel = new Panel(this, by, promptOnly);
       this._oh3Main = panel;
       const w = this.addDOMWidget(BOARD, "div", panel.root, { serialize: false });
       /* The board has no width of its own: it is the node's, whatever the node has been dragged to.
@@ -651,8 +661,8 @@ app.registerExtension({
        * Director: it squeezed a field to eleven pixels and never recovered. */
       Object.defineProperty(w, "width", { get: () => null, set: () => {}, configurable: true });
       w.computeSize = (width) => [width || NODE_W,
-                                  Math.max(MIN_H, this.size?.[1] || NODE_H) - NODE_H_EXTRA];
-      this.size = [NODE_W, NODE_H];
+                                  Math.max(minHeight, this.size?.[1] || height) - socketHeight];
+      this.size = [NODE_W, height];
       requestAnimationFrame(() => {
         attachPrompt(panel.box, this);
         panel.render();
@@ -665,7 +675,7 @@ app.registerExtension({
     nodeType.prototype.onResize = function (size) {
       try {
         size[0] = Math.max(MIN_W, size[0]);
-        size[1] = Math.max(MIN_H, size[1]);
+        size[1] = Math.max(minHeight, size[1]);
       } catch (err) { /* an unexpected size object is not worth losing the node over */ }
       return onResize?.apply(this, arguments);
     };
