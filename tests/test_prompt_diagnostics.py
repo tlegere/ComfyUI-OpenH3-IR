@@ -22,7 +22,7 @@ def test_accepted_first_pass_is_reported_without_inventing_rejected_text():
     assert d["correction_rounds"] == 0
     assert d["last_rejected_brief"] is None
     assert d["timings_seconds"]["compose_s"] == 4.2
-    assert "original and intermediate" in d["trace_limitations"]
+    assert "initial and intermediate" in d["trace_limitations"]
 
 
 def test_fallback_preserves_the_last_rejected_written_brief_and_real_errors():
