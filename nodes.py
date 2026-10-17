@@ -44,6 +44,7 @@ from __future__ import annotations
 
 import os
 import tempfile
+import time
 from typing import Any
 
 from comfy_api.latest import ComfyExtension, io
@@ -406,6 +407,7 @@ class OpenH3IRCompile(io.ComfyNode):
         if stops:
             raise ServiceError("\n\n".join(stops))
 
+        compile_started = time.monotonic()
         if here:
             # Which model, settled on this side so the refusal can name a field on the canvas. Only
             # asked of the endpoint when the field is empty, so a graph that names its model spends
@@ -428,6 +430,7 @@ class OpenH3IRCompile(io.ComfyNode):
                 comfy_root=_comfy_root(), transcripts=transcripts,
                 timeout=float(machine["timeout_s"]), brief=brief)
 
+        compile_seconds = time.monotonic() - compile_started
         prompt, width, height, length, ref_sizing = render_fields(body)
         warning = check_mode(declared, str(body.get("mode", "")))
 
@@ -455,7 +458,11 @@ class OpenH3IRCompile(io.ComfyNode):
         wiring = body.get("wiring") or []
         conflict = len({w.get("sizing") for w in wiring if w.get("sizing")}) > 1
         text = report(body, compiler=half.where, sizing_conflict=conflict,
-                      asked_seconds=seconds, bindings=bindings)
+                      asked_seconds=seconds, bindings=bindings,
+                      run_settings={"effort": effort, "creativity": creativity, "shots": shots,
+                                    "silent": silent, "spoken_language": spoken_language,
+                                    "sizing": sizing, "seed": seed},
+                      compile_seconds=compile_seconds)
         if here:
             # Which endpoint wrote this, and which model on it. Named every time, because the brief
             # is the model's work and two models write two different briefs from one sentence -- so
