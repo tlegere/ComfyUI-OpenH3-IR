@@ -410,16 +410,50 @@ def test_the_graph_needs_no_loader_boxes():
 
 
 
+def test_prompt_only_has_two_text_outputs_and_reuses_mains_inputs():
+    kinds = [k for k, _label in _outputs_of("OpenH3IRPromptOnly")]
+    labels = [label for _kind, label in _outputs_of("OpenH3IRPromptOnly")]
+    assert kinds == ["String", "String"]
+    assert labels == ["prompt", "report"]
+    # Prompt Only's schema takes the same input objects from Main, preserving
+    # the widget order and every optional socket without maintaining a copy.
+    src = ast.get_source_segment(TEXT, SCHEMAS["OpenH3IRPromptOnly"])
+    assert "inputs=main.inputs" in src
+
+
+def test_prompt_only_does_not_instantiate_any_h3_generation_models():
+    main_class = next(node for node in TREE.body
+                      if isinstance(node, ast.ClassDef) and node.name == "OpenH3IRCompile")
+    execute = next(node for node in main_class.body
+                   if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef))
+                   and node.name == "execute")
+    guards = [node for node in ast.walk(execute) if isinstance(node, ast.If)
+              and isinstance(node.test, ast.UnaryOp)
+              and isinstance(node.test.op, ast.Not)
+              and isinstance(node.test.operand, ast.Name)
+              and node.test.operand.id == "prompt_only"]
+    assert len(guards) == 1
+    model_calls = {"_load_model", "_load_clip", "_load_vae", "_condition"}
+    def called_under(node):
+        return {x.func.attr for x in ast.walk(node)
+                if isinstance(x, ast.Call) and isinstance(x.func, ast.Attribute)
+                and x.func.attr in model_calls}
+    assert called_under(guards[0]) == model_calls
+    # None of these calls may occur outside this guard.
+    other = [node for node in execute.body if node is not guards[0]]
+    assert set().union(*(called_under(x) for x in other)) == set()
+
+
 # --------------------------------------------------------------------------- the tray-era surface
 
-def test_the_node_set_is_four_and_the_ids_are_frozen():
+def test_the_node_set_is_five_and_the_ids_are_frozen():
     """A rename silently breaks every workflow anyone saved and every video anyone rendered, which
     the owner hit in person. Pinned.
 
-    Four since the Director node. This pin exists to catch a RENAME, not to forbid a fourth node --
-    so adding one is a deliberate edit here, and removing or renaming one still has to be."""
+    Five since the Prompt Only node. This pin exists to catch a RENAME, not to forbid additions;
+    adding one is a deliberate edit here, and removing or renaming one still has to be."""
     assert sorted(SCHEMAS) == ["OpenH3IRCompile", "OpenH3IRDirector", "OpenH3IRMedia",
-                               "OpenH3IRSetup"]
+                               "OpenH3IRPromptOnly", "OpenH3IRSetup"]
 
 
 def test_main_is_one_sentence_a_tray_a_setup_and_the_knobs():

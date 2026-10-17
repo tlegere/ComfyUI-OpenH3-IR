@@ -125,17 +125,22 @@ The Setup node sends it a picture and checks instead of trying to infer that fro
 
 ---
 
-## The four nodes
+## The five nodes
 
-Search `h3` in ComfyUI and all four appear.
+Search `h3` in ComfyUI to find Main, Prompt Only, Setup, Media and Director.
 
-`tray` finds Media, `director` finds Director, and `minimax` finds Main.
+For prompt development, connect **Setup** to **OpenH3-IR Prompt Only**. It uses
+the same prompt, timing, creativity, shots, optional Director and Media inputs as
+Main, and returns only `prompt` and `report`. It runs the same compiler and
+validation checks without loading the MiniMax H3 checkpoint, text encoder, VAEs,
+or conditioning. This lets you inspect and reuse the brief before rendering.
 
-A text-only graph needs **Main + Setup**.
+Prompt Only still uses the existing Setup node, including its five model file
+selections, even though it does not load those files. No changes to saved Main
+workflows or Setup bundles are needed.
 
-The moment you add a picture, clip or sound, add **Media** and connect its `media` output to Main.
-
-Director is always optional.
+For direct video generation, connect **Main + Setup** as before. Add **Media** when
+you have pictures, clips or sound. Director is always optional.
 
 ---
 

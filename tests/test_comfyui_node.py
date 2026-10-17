@@ -701,3 +701,42 @@ def test_the_node_reads_its_one_field_and_refuses_only_what_is_not_that_shape():
     with pytest.raises(ServiceError) as e:
         director_bundle(profile="[1, 2]")
     assert "has to be an object" in str(e.value)
+
+
+def test_report_includes_effective_writing_settings_and_compile_time():
+    """What took five minutes must be diagnosable from the report, not just LM Studio logs."""
+    body = {"mode": "t2va", "frames": 481, "canvas": [1344, 768],
+            "render_hash": "a" * 64, "brief_id": "brief-1", "wiring": []}
+    settings = {"effort": "max", "creativity": "extreme", "shots": "auto",
+                "silent": False, "spoken_language": "English", "sizing": "max",
+                "seed": 123}
+    got = C.report(body, compiler="local", sizing_conflict=False,
+                   asked_seconds=20.0, run_settings=settings, compile_seconds=294.958)
+    assert "effort=max, invention=extreme, shots=auto" in got
+    assert "music=writer decides" in got and "spoken in=English" in got
+    assert "reference size=max" in got and "123" in got
+    assert "compile time" in got and "295.0s (writing and validation)" in got
+    assert "brief status" in got and "written" in got
+    assert "past H3's trained band" in got
+
+
+def test_truncated_fallback_is_labeled_as_failure_not_a_finished_scene():
+    body = {"mode": "t2va", "frames": 481, "canvas": [1344, 768],
+            "degraded": True,
+            "fallback_reason": "the composing model failed: TruncatedResponse: "
+                               "response hit max_tokens (20000); output is incomplete"}
+    got = C.report(body, compiler="local", sizing_conflict=False,
+                   compile_seconds=294.958)
+    assert "brief status" in got and "fallback" in got
+    assert "TruncatedResponse" in got
+    # The report wraps notes at 94 characters; normalize continuations to read the sentence.
+    assert "simple fallback is not the writer's completed scene" in " ".join(got.split())
+
+
+def test_legacy_report_call_does_not_invent_run_telemetry():
+    """Older callers cannot know elapsed time or UI settings and must not guess them."""
+    got = C.report({"mode": "t2va", "frames": 192, "canvas": [1344, 768]},
+                   compiler="local", sizing_conflict=False)
+    assert "compile time" not in got
+    assert "brief status" not in got
+    assert "effort=" not in got
