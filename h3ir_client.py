@@ -1343,7 +1343,9 @@ def bindings_by_content(written: list[tuple[str, str, str, dict[str, Any]]],
 
 def report(prompt_body: dict[str, Any], *, compiler: str, sizing_conflict: bool,
            asked_seconds: float | None = None,
-           bindings: dict[str, list[str]] | None = None) -> str:
+           bindings: dict[str, list[str]] | None = None,
+           run_settings: dict[str, Any] | None = None,
+           compile_seconds: float | None = None) -> str:
     """A short human-readable account of what came back, for a preview node or the console.
 
     It exists because the interesting facts are the ones a user cannot see in a STRING socket: which
@@ -1360,6 +1362,11 @@ def report(prompt_body: dict[str, Any], *, compiler: str, sizing_conflict: bool,
     back on it: slot, then label, then the input on H3's node it rides. The two sides speak the same
     words, and a label landing on the wrong slot becomes visible instead of becoming a render nobody
     can explain.
+
+    Optional run settings and elapsed time belong to the specific ComfyUI execution, not
+    the compiler document; the report only includes them when its caller provides them.
+    The timer covers compilation, including possible validation and repair attempts,
+    not model initialization or actual video rendering.
     """
     frames = prompt_body.get("frames") or 0
     canvas = prompt_body.get("canvas") or [0, 0]
@@ -1374,6 +1381,19 @@ def report(prompt_body: dict[str, Any], *, compiler: str, sizing_conflict: bool,
         line("render hash", str(prompt_body.get("render_hash", ""))[:16]),
         line("brief id", f"{prompt_body.get('brief_id', '')}   from {compiler}"),
     ])
+    if run_settings is not None:
+        settings = run_settings
+        lines.append(line("writing", f"effort={settings['effort']}, "
+                                     f"invention={settings['creativity']}, "
+                                     f"shots={settings['shots']}"))
+        lines.append(line("choices", f"music={'off' if settings['silent'] else 'writer decides'}, "
+                                     f"spoken in={settings['spoken_language']}, "
+                                     f"reference size={settings['sizing']}"))
+        lines.append(line("brief seed", str(settings["seed"])))
+    if compile_seconds is not None:
+        lines.append(line("compile time", f"{compile_seconds:.1f}s (writing and validation)"))
+        lines.append(line("brief status", "fallback" if prompt_body.get("degraded")
+                                        else "written"))
 
     wiring = prompt_body.get("wiring") or []
     # One label is accepted as well as a list of them, because a bare string is iterable and
@@ -1408,6 +1428,9 @@ def report(prompt_body: dict[str, Any], *, compiler: str, sizing_conflict: bool,
     if prompt_body.get("degraded"):
         lines.append(line("note", "the brief is a fallback, not a written one: "
                                   f"{prompt_body.get('fallback_reason')}"))
+        if "TruncatedResponse" in str(prompt_body.get("fallback_reason", "")):
+            lines.append(line("note", "The language model reached its output token limit. "
+                                      "The simple fallback is not the writer's completed scene."))
     return "\n".join(lines)
 
 
